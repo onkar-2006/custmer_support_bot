@@ -1,25 +1,87 @@
-Customer Support Voice AssistantThis project implements a conversational voice assistant powered by the Groq API for ultra-fast language model inference, coupled with ElevenLabs for high-quality Text-to-Speech (TTS) and SpeechRecognition for accurate Voice-to-Text (VTT). The application features a Python Flask backend and a modern, single-file HTML/JavaScript frontend (or React/JSX, as included in other files).🚀 FeaturesReal-Time Conversation: Leverage Groq's low-latency performance for a fluid, natural conversational experience.Multimodal Interaction: Seamlessly handles user voice input (VTT) and provides synthesized voice replies (TTS).Session Management: Maintains conversation history and context using unique session IDs stored on the client and server.Extensible Backend: Uses a LangGraph/ReAct structure in the Flask server (personal_assistant_server.py) for easy addition of more tools and functionality.⚙️ PrerequisitesTo run this project, you will need:Python 3.8+API Keys:Groq API Key: For accessing the LLM (e.g., Llama 3) and Whisper transcription.ElevenLabs API Key: For generating the high-quality voice response audio.FFmpeg: Required by the pydub library for handling audio conversion and format manipulation. You must have ffmpeg installed and accessible in your system's PATH.🛠️ Setup and Installation1. Configure Environment VariablesCreate a file named .env in the root directory of your project to store your API keys and configuration.# .env file
+# 🎙️ Customer Support Voice Assistant  
+
+A conversational **voice assistant** powered by the **Groq API** for ultra-fast language model inference, **ElevenLabs** for high-quality Text-to-Speech (TTS), and **SpeechRecognition** for accurate Voice-to-Text (VTT).  
+
+The project features a **Python Flask backend** and a **modern single-file HTML/JavaScript frontend** (with optional React/JSX version).  
+
+---
+
+## 🚀 Features  
+
+- **Real-Time Conversation** → Leverages Groq’s low-latency performance for fluid, natural conversation.  
+- **Multimodal Interaction** → Handles user **voice input (VTT)** and provides **synthesized voice replies (TTS)**.  
+- **Session Management** → Maintains conversation history & context with unique session IDs.  
+- **Extensible Backend** → Built with **LangGraph/ReAct structure** for easy addition of tools and functionality.  
+
+---
+
+## ⚙️ Prerequisites  
+
+To run this project, you’ll need:  
+
+- Python **3.8+**  
+- **API Keys**:  
+  - Groq API Key → For accessing LLMs (e.g., Llama 3) and Whisper transcription.  
+  - ElevenLabs API Key → For generating TTS audio.  
+- **FFmpeg** → Required by `pydub` for audio conversion. Must be installed and added to your system’s `PATH`.  
+
+---
+
+## 🛠️ Setup & Installation  
+
+### 1. Configure Environment Variables  
+
+Create a `.env` file in the root directory:  
+
+```ini
+# .env
 GROQ_API_KEY="YOUR_GROQ_API_KEY"
 ELEVENLABS_API_KEY="YOUR_ELEVENLABS_API_KEY"
-
-2. Install Python DependenciesIt's highly recommended to use a virtual environment.# Create a virtual environment
+# Create a virtual environment
 python -m venv venv
 
-# Activate the virtual environment (Linux/macOS)
+# Activate (Linux/macOS)
 source venv/bin/activate
 
-# Activate the virtual environment (Windows)
+# Activate (Windows)
 .\venv\Scripts\activate
 
-# Install required packages (assuming these are the main dependencies)
+# Install dependencies
 pip install Flask groq elevenlabs SpeechRecognition pydub python-dotenv langchain_core langgraph
+🏗️ Architecture Overview
 
-3. Ensure FFmpeg is InstalledIf you encounter errors related to audio processing, confirm that FFmpeg is correctly installed on your system.▶️ Running the ApplicationThis project requires two separate terminals to run the backend server and serve the frontend client.Terminal 1: Start the Backend (Flask Server)Navigate to the project directory and run the Flask application:python personal_assistant_server.py
+The system follows a client-server architecture:
 
-The server should start and listen on port 5000:* Running on [http://127.0.0.1:5000/](http://127.0.0.1:5000/) (Press CTRL+C to quit)
+Client (voice_assistant_client.html / React Component)
 
-Terminal 2: Start the Frontend (HTTP Server)The client file (e.g., voice_assistant_client.html or the React app wrapper) must be served by a simple web server to access the microphone and make API requests. Navigate to the project directory in a new terminal and use Python's built-in server:python -m http.server 8000
+Handles UI, microphone access, and audio recording.
 
-The client server should start on port 8000:Serving HTTP on 0.0.0.0 port 8000 ([http://0.0.0.0:8000/](http://0.0.0.0:8000/)) ...
+Sends audio blobs (WAV) + session ID → Flask backend.
 
-Access the AppOpen your web browser and navigate to:http://localhost:8000/voice_assistant_client.htmlClick the microphone button to start the conversation! You will likely need to grant microphone permissions to your browser.🏗️ Architecture OverviewThe voice assistant follows a standard client-server architecture:Client (voice_assistant_client.html or React Component):Handles the UI, microphone access, and audio recording.Sends recorded audio (WAV blob) and the current session ID to the Flask backend's /api/chat endpoint.Receives the AI's synthesized audio response and plays it back.Server (personal_assistant_server.py):Receives the audio file and session ID.VTT: Uses Groq's Whisper model via the groq client to transcribe the audio into text.Agent: The core logic is powered by a LangGraph agent using a ReAct pattern, which decides whether to use a tool (like add_task or web_search) or provide a direct conversational response.TTS: Uses the gTTS library to generate the audio response.Returns the generated audio, the user's transcription, and the updated session ID to the client.
+Receives synthesized audio responses and plays them back.
+
+Server (personal_assistant_server.py)
+
+VTT → Uses Groq Whisper to transcribe audio.
+
+Agent → Powered by a LangGraph ReAct agent to decide actions (tools like add_task, web_search, or direct responses).
+
+TTS → Uses ElevenLabs for natural-sounding audio replies.
+
+Returns:
+
+User’s transcription
+
+AI-generated audio response
+
+Updated session IDExample Workflow
+
+User clicks 🎤 microphone → speaks a query.
+
+Client records & sends audio → backend /api/chat.
+
+Backend → transcribes (Whisper) → processes (LangGraph agent) → generates reply.
+
+Backend → sends back AI response text + TTS audio.
+
+Client → plays AI’s voice reply → conversation continues.
