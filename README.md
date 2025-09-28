@@ -46,42 +46,6 @@ source venv/bin/activate
 # Activate (Windows)
 .\venv\Scripts\activate
 ```
-# Install dependencies
-pip install Flask groq elevenlabs SpeechRecognition pydub python-dotenv langchain_core langgraph
-🏗️ Architecture Overview
 
-The system follows a client-server architecture:
 
-Client (voice_assistant_client.html / React Component)
 
-Handles UI, microphone access, and audio recording.
-
-Sends audio blobs (WAV) + session ID → Flask backend.
-
-Receives synthesized audio responses and plays them back.
-
-Server (personal_assistant_server.py)
-
-VTT → Uses Groq Whisper to transcribe audio.
-
-Agent → Powered by a LangGraph ReAct agent to decide actions (tools like add_task, web_search, or direct responses).
-
-TTS → Uses ElevenLabs for natural-sounding audio replies.
-
-Returns:
-
-User’s transcription
-
-AI-generated audio response
-
-Updated session IDExample Workflow
-
-User clicks 🎤 microphone → speaks a query.
-
-Client records & sends audio → backend /api/chat.
-
-Backend → transcribes (Whisper) → processes (LangGraph agent) → generates reply.
-
-Backend → sends back AI response text + TTS audio.
-
-Client → plays AI’s voice reply → conversation continues.
