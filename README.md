@@ -45,7 +45,7 @@ source venv/bin/activate
 
 # Activate (Windows)
 .\venv\Scripts\activate
-
+```
 # Install dependencies
 pip install Flask groq elevenlabs SpeechRecognition pydub python-dotenv langchain_core langgraph
 🏗️ Architecture Overview
