@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Custmor Support Voice Assistant</title>
+    <!--
+        CSP FIX: This policy is updated to allow 'unsafe-eval' (required by Tailwind CDN)
+        and 'unsafe-inline' (required for embedded script/style tags in a single-file HTML).
+    -->
+    <meta http-equiv="Content-Security-Policy" content="
+        script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn.tailwindcss.com;
+        style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com;
+    ">
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for the recording indicator */
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(255, 0, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
+        }
+        .recording {
+            animation: pulse 1.5s infinite;
+        }
+        .font-inter {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 flex items-center justify-center min-h-screen font-inter p-4">
+    <div id="app" class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md text-center">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6">Groq AI Voice Chat</h1>
+        <p class="text-gray-500 mb-8">Click the button once to start recording.</p>
+
+        <!-- Status & Transcription Display -->
+        <div class="mb-8 p-4 bg-blue-50 rounded-lg border border-blue-200 min-h-[4rem]">
+            <p id="status" class="text-blue-700 font-medium">Click to start conversation.</p>
+            <p id="transcription" class="text-sm text-gray-600 mt-2 italic hidden"></p>
+        </div>
+
+        <!-- Microphone Button -->
+        <button id="micButton"
+                class="w-24 h-24 rounded-full bg-blue-600 text-white flex items-center justify-center transition duration-200 transform hover:scale-105 active:scale-95 mx-auto shadow-lg"
+                title="Toggle Recording">
+            <svg id="micIcon" xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
+            </svg>
+        </button>
+        <p id="micHint" class="mt-2 text-sm text-gray-400">Start / Stop</p>
+
+        <!-- Loading Indicator -->
+        <div id="loader" class="mt-6 hidden">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+            <p class="text-blue-500 mt-2">AI is thinking...</p>
+        </div>
+
+        <!-- Error/Session Indicator -->
+        <p id="error" class="text-red-500 mt-4 text-sm hidden">An error occurred.</p>
+        <p id="session-info" class="text-xs text-gray-300 mt-6">Session ID: <span id="session-id">None</span></p>
+    </div>
+
+    <script>
+        const API_URL = 'http://127.0.0.1:5000/api/chat';
+        const micButton = document.getElementById('micButton');
+        const statusDisplay = document.getElementById('status');
+        const transcriptionDisplay = document.getElementById('transcription');
+        const loader = document.getElementById('loader');
+        const errorDisplay = document.getElementById('error');
+        const sessionIdSpan = document.getElementById('session-id');
+
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let stream = null;
+        let isRecording = false;
+        let isProcessing = false;
+        let sessionId = localStorage.getItem('voice-assistant-session-id') || null;
+
+        sessionIdSpan.textContent = sessionId || 'New';
+
+        // --- UI Update Helper ---
+        const updateUI = (recording, processing, statusText, color = 'blue') => {
+            isRecording = recording;
+            isProcessing = processing;
+            statusDisplay.textContent = statusText;
+            statusDisplay.className = `text-${color}-700 font-medium`;
+
+            // Button styling
+            micButton.disabled = processing;
+            if (recording) {
+                micButton.classList.add('recording', 'bg-red-500');
+                micButton.classList.remove('bg-blue-600');
+            } else {
+                micButton.classList.remove('recording', 'bg-red-500');
+                micButton.classList.add('bg-blue-600');
+            }
+
+            // Loader visibility
+            loader.classList.toggle('hidden', !processing);
+            transcriptionDisplay.classList.add('hidden');
+            errorDisplay.classList.add('hidden');
+        };
+
+        // --- Audio Playback Functions ---
+        const playAudio = (blob) => {
+            updateUI(false, false, "AI is speaking, listen closely...", 'green');
+
+            const audioUrl = URL.createObjectURL(blob);
+            const audio = new Audio(audioUrl);
+
+            audio.play();
+
+            audio.onended = () => {
+                URL.revokeObjectURL(audioUrl);
+                // After AI finishes speaking, automatically start listening for the reply
+                setTimeout(() => {
+                    startRecording();
+                }, 500); // 500ms pause for a natural conversational gap
+            };
+
+            audio.onerror = (e) => {
+                console.error("Audio playback error:", e);
+                updateUI(false, false, "AI response audio error. Click to restart.", 'red');
+            };
+        };
+
+        // --- Recording Handlers ---
+        const startRecording = async () => {
+            if (isRecording || isProcessing) return;
+
+            try {
+                // Request microphone access
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = sendAudio;
+
+                mediaRecorder.start();
+                updateUI(true, false, "Listening for your reply...", 'red');
+            } catch (err) {
+                console.error('Error accessing microphone:', err);
+                updateUI(false, false, "Error: Microphone access denied. Click to retry.", 'red');
+                errorDisplay.textContent = "Please allow microphone access.";
+                errorDisplay.classList.remove('hidden');
+            }
+        };
+
+        const stopRecording = () => {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive' && isRecording) {
+                mediaRecorder.stop();
+                // Stop the microphone stream tracks
+                stream.getTracks().forEach(track => track.stop());
+                updateUI(false, true, "Sending query...", 'blue');
+            }
+        };
+
+        const toggleRecording = () => {
+            if (isRecording) {
+                stopRecording();
+            } else if (!isProcessing) {
+                startRecording();
+            }
+        };
+
+        // --- Send Audio to Backend ---
+        const sendAudio = async () => {
+            if (audioChunks.length === 0) {
+                updateUI(false, false, "No voice detected. Click to try again.", 'blue');
+                return;
+            }
+
+            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'input.wav');
+            if (sessionId) {
+                formData.append('session_id', sessionId);
+            }
+
+            audioChunks = []; // Clear chunks immediately after creating blob
+
+            try {
+                // Implement exponential backoff for API calls
+                const MAX_RETRIES = 3;
+                let response;
+
+                for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+                    try {
+                        response = await fetch(API_URL, {
+                            method: 'POST',
+                            body: formData,
+                        });
+                        if (response.status !== 500) break; // Break on success or non-500 error
+                        // Retry logic for 500 errors (server issue)
+                        if (attempt < MAX_RETRIES - 1) {
+                            const delay = Math.pow(2, attempt) * 1000;
+                            console.warn(`Attempt ${attempt + 1} failed (Status: ${response.status}). Retrying in ${delay}ms...`);
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                        }
+                    } catch (error) {
+                        // Retry for network errors
+                        if (attempt < MAX_RETRIES - 1) {
+                            const delay = Math.pow(2, attempt) * 1000;
+                            console.warn(`Network error on attempt ${attempt + 1}. Retrying in ${delay}ms...`);
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                        } else {
+                            throw error; // Throw after max retries
+                        }
+                    }
+                }
+
+                if (!response.ok) {
+                    const errorJson = await response.json().catch(() => ({ error: 'Unknown server error' }));
+                    throw new Error(errorJson.error || `Server responded with status ${response.status}`);
+                }
+
+
+                // Success path
+                const transcriptionHeader = response.headers.get('X-Transcription');
+                if (transcriptionHeader) {
+                    transcriptionDisplay.textContent = `You said: "${transcriptionHeader}"`;
+                    transcriptionDisplay.classList.remove('hidden');
+                }
+
+                const audioResponseBlob = await response.blob();
+
+                const newSessionId = response.headers.get('X-Session-ID');
+                if (newSessionId && newSessionId !== sessionId) {
+                    sessionId = newSessionId;
+                    localStorage.setItem('voice-assistant-session-id', sessionId);
+                    sessionIdSpan.textContent = sessionId;
+                }
+
+                playAudio(audioResponseBlob);
+
+            } catch (error) {
+                console.error('Fetch error:', error);
+                const errorMessage = error.message.includes('Server responded with status 500')
+                    ? "Server error. Check your backend console."
+                    : `Error: ${error.message}`;
+
+                updateUI(false, false, "Error communicating with AI. Click to restart.", 'red');
+                errorDisplay.textContent = errorMessage;
+                errorDisplay.classList.remove('hidden');
+            }
+        };
+
+        // --- Event Listener (Toggle Recording) ---
+        micButton.addEventListener('click', toggleRecording);
+        micButton.addEventListener('touchstart', (e) => {
+             e.preventDefault();
+             toggleRecording();
+        });
+
+
+    </script>
+</body>
+</html>
